@@ -2,7 +2,7 @@ conda create -n dry_mass_env -y
 conda activate dry_mass_env
 pip install cellpose
 pip install cellpose --upgrade
-pip install tifffile scikit-image tqdm matplotlib ipywidgets opencv-python
+pip install tifffile scikit-image tqdm matplotlib ipywidgets opencv-python pandas
 pip install numpy==1.26.4
 pip install ipykernel
 python -m ipykernel install --user --name=dry_mass_kernel
