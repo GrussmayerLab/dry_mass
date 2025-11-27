@@ -161,9 +161,7 @@ class TopographicPhaseRetrieval:
         stack = stack[ay:(temp_nPix - 1 + ay),ax:(temp_nPix + ax - 1),:]
         return stack
 
-    def cropXY(sefl, input_=None,N=None):
-        print("Cropping..")
-        
+    def cropXY(self, input_=None,N=None):        
         size = input_.shape
         if len(size) == 3:
             D_FLAG = True
@@ -193,7 +191,6 @@ class TopographicPhaseRetrieval:
                 out=input_[ox:ox+N, oy:oy+N,:]
             else: 
                 out=input_[ox:ox+N, oy:oy+N,:, :]
-        print("Cropping finished")
         return out
 
   
@@ -304,7 +301,7 @@ class phase_structure:
     
         # processing parameters
         self.proc_mirrorX = False            # mirror the input stack along X 
-        self.proc_mirrorZ = True             # mirror the input stack along Z
+        self.proc_mirrorZ = False             # mirror the input stack along Z
         self.proc_applyFourierMask = True    # apply the denoising Fourier mask
                                     
                            
