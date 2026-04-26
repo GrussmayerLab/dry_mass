@@ -270,12 +270,12 @@ def segment_volume(
     plt.tight_layout()
     plt.show()
 
-    return mask, base_img_2d, flow, fig
+    return mask, base_img_2d, flow, fig, base_img_2d
 
 
 def segment_nucleus(
     data: np.ndarray, # nuclear data only
-    method: str = "focal",
+    method: str = "mean",
     fp: int = 0,
 ) -> np.ndarray:
     """Simple nucleus segmentation on a focal slice."""
@@ -514,10 +514,13 @@ def build_cells_and_metrics(
 
 def get_nucleus_mask_from_image(
     image: np.ndarray, area_threshold: int = 100, nuc_distance: int = 25):
-    image = ski.filters.gaussian(image, sigma=3)
+    image = ski.filters.gaussian(image, sigma=1)
     thresh = ski.filters.threshold_otsu(image)
     binary = image > thresh
-    binary  = ski.morphology.binary_erosion(binary)
+    # erode mask to separate close nuclei and alleviate diffraction effects 
+    for _ in range(3):
+        binary  = ski.morphology.binary_erosion(binary)
+
 
     distance = ndi.distance_transform_edt(binary)
     coords = ski.feature.peak_local_max(distance, footprint=np.ones((7, 7)),
@@ -678,7 +681,7 @@ def write_cell_component_images(cells: Dict[int, Cell], path_save: str, filename
 class PipelineConfig:
     channel_bf: int = 0              # index into c-axis for BF channel (when input is 4D)
     seg_reduce: str = "focal"        # how to collapse z for segmentation: 'mean' or 'max' or 'focal'
-    seg_reduce_nuc: str = "max"        # how to collapse z for nucleus segmentation: 'mean' or 'max' or 'focal'
+    seg_reduce_nuc: str = "mean"        # how to collapse z for nucleus segmentation: 'mean' or 'max' or 'focal'
     opening_radius: int = 1
     min_size: int = 64
     wavelength_m: float = 550e-9     # default 550 nm
@@ -695,6 +698,7 @@ class PipelineConfig:
     segment_nucleus : bool = False    # whether to segment nucleus
     channel_nuc: int = 1              # channel index for nucleus segmentation (if enabled)
     cell_area_threshold: int = 6400   # pixel-wise area threshold
+    stack_limit: int = 0                  # optional (zrange) to crop before further processing
 
 @dataclass
 class PipelineOutputs:
@@ -763,19 +767,26 @@ def run_pipeline(
         )
         phi_3d = load_data(filepath)
         #phi_3d = adjust_qp_to_fluorescence(phi_3d, fl_channels, invert_stack=cfg.invert_stack)
-
-    # cut out brightfield data from fl_channels
-    fl_channels = fl_channels[:,:,1:,:] 
+    
     # 2) Focal plane from QP
     if cfg.fp >= 0:
         z_focal = cfg.fp
     else:
         z_focal = determine_focal_plane_from_qp(phi_3d)
 
+
+    if cfg.stack_limit:
+        rr = [np.max([int(z_focal-cfg.stack_limit/2),0]), np.min([int(z_focal+ cfg.stack_limit/2), phi_3d.shape[2]])] 
+        fl_channels = fl_channels[:,:,1:,rr[0]:rr[1]]
+        phi_3d = phi_3d[:,:,rr[0]:rr[1]]
+
+    # cut out brightfield data from fl_channels
+    #fl_channels = fl_channels[:,:,1:,:] 
+
     # 3) Segmentation using all available data
     model = cfg.cellpose_model if cfg.cellpose_model is not None else setup_cellpose_model(model_type=cfg.model_type)
 
-    seg_mask, base_img_for_vis, flow, fig = segment_volume(
+    seg_mask, base_img_for_vis, flow, fig, phi_fp= segment_volume(
         data=phi_3d, method=cfg.seg_reduce, 
         model_type=cfg.model_type,
         model=model,
@@ -786,7 +797,7 @@ def run_pipeline(
     )
 
     # reduce the phase image to the projection/focal plane 
-    phi_fp = phi_3d[:, :, z_focal]
+    #phi_fp = phi_3d[:, :, z_focal]
 
         # Sanity: shapes must match for per-pixel integration
     if phi_fp.shape != seg_mask.shape:
